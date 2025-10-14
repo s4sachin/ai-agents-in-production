@@ -3,6 +3,7 @@ import { openai } from "./ai";
 import { zodFunction, zodResponseFormat } from "openai/helpers/zod";
 import { systemPrompt as defaultSystemPrompt } from "./systemPrompt";
 import { z } from "zod";
+import { getSummary } from "./memory";
 
 export const runLLM = async ({
   messages,
@@ -16,6 +17,7 @@ export const runLLM = async ({
   systemPrompt?: string;
 }) => {
   const formattedTools = tools.map(zodFunction);
+  const summary = await getSummary();
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -23,7 +25,9 @@ export const runLLM = async ({
     messages: [
       {
         role: "system",
-        content: systemPrompt || defaultSystemPrompt,
+        content: `${
+          systemPrompt || defaultSystemPrompt
+        }. Conversation so far: ${summary}`,
       },
       ...messages,
     ],
@@ -59,5 +63,16 @@ export const runApprovalCheck = async (userMessage: string) => {
     ],
   });
 
-  return result.choices[0].message.parsed?.approved
+  return result.choices[0].message.parsed?.approved;
+};
+
+export const summarizeMessages = async (messages: AIMessage[]) => {
+  const response = await runLLM({
+    messages,
+    systemPrompt:
+      "You are a helpful assistant that summarizes conversations play by play between a human and an AI. Summarize the conversation in a concise manner, focusing on the main points and topics discussed. The summary should be brief and to the point, capturing the essence of the interaction without going into excessive detail. Use clear and simple language. This summary will be used in another LLM prompt, so make sure it is relevant and useful for that context.",
+    temperature: 0.3,
+  });
+
+  return response.content || "";
 };
